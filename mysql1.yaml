@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: development
+  labels:
+    app: mysql
+spec:
+  ports:
+    - port: 3306
+  selector:
+    app: mysql
+  clusterIP: None
+---
+apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
+kind: Deployment
+metadata:
+  name: mysql
+  namespace: development
+  labels:
+    app: mysql
+spec:
+  selector:
+    matchLabels:
+      app: mysql
+      
+  template:
+    metadata:
+      labels:
+        app:  mysql
+    spec:
+      containers:
+      - image: mysql:5.7
+        name: mysql
+        volumeMounts:
+          - name: mysqllog
+            mountPath: /var/log/mysql/
+
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name:  db-credentials
+              key: MYSQL_ROOT_PASSWORD 
+        ports:
+        - containerPort: 3306
+          name: mysql
+
+      # This is for FluentD Logging Container
+      - name: fluentd1
+        env:
+        - name: FLUENT_UID
+          value: root
+        - name: FLUENT_CONF
+          value: fluent.conf
+        - name: FLUENTD_ARGS
+          value: -c /fluentd/etc/fluent.conf
+        image: fluentd
+        volumeMounts:
+        - name: mysqllog
+          mountPath: /var/log/mysql/
+       
+        - name:  fdconf
+          mountPath:  /fluentd/etc/
+
+      # Logrotating containers:
+      #- name: LogRotate
+      #  image: saravak/logrotatek8s
+      #  volumeMounts:
+      #  - name: tomcatlog
+      #    mountPath: /logs/
+
+      volumes:
+      - name: mysqllog
+        emptyDir: {}
+     # - name: tomcatlog
+     #   emptyDir: {}
+      - name: fdconf
+        configMap:
+          name: fluentdconf1

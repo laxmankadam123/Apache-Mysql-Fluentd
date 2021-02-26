@@ -1,0 +1,81 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name:  httpd-svc
+  namespace: development
+  labels:
+    app: httpd
+spec:
+  selector:
+    app:  httpd
+  type: NodePort
+  ports:
+  - port:  80
+    targetPort:  8080
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpd
+  namespace: development
+  labels:
+    app: httpd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpd
+  template:
+    metadata:
+      labels:
+        environment: DEV
+        managedby: K8s
+        app: httpd
+    spec:
+      containers:
+
+      # Primary Container
+      - name: httpd
+        image:  httpd
+        volumeMounts:
+          - name: applog
+            mountPath: /var/log/httpd-access.log
+        ports:
+        - containerPort: 80
+     #   resources:
+     #     limits:
+     #       memory: 1028Mi
+
+      # This is for FluentD Logging Container
+      - name: fluentd
+        env:
+        - name: FLUENT_UID
+          value: root
+        - name: FLUENT_CONF
+          value: fluent.conf
+        - name: FLUENTD_ARGS
+          value: -c /fluentd/etc/fluent.conf
+        image: saravak/fluentd:elastic
+        volumeMounts:
+        - name: applog
+          mountPath: /var/log/httpd-access.log
+       
+        - name:  fdconf
+          mountPath:  /fluentd/etc/
+
+      # Logrotating containers:
+      #- name: LogRotate
+      #  image: saravak/logrotatek8s
+      #  volumeMounts:
+      #  - name: tomcatlog
+      #    mountPath: /logs/
+
+      volumes:
+      - name: applog
+        emptyDir: {}
+     # - name: tomcatlog
+     #   emptyDir: {}
+      - name: fdconf
+        configMap:
+          name: fluentdconf
